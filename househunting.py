@@ -202,148 +202,6 @@ def is_brood(x_id):
 def sigmoid(x):
     return 1/(1+np.exp(-x*lambda_sigmoid))
 
-# main simulation function
-def execute(plot, run_number, csvfile, is_validation = False):
-    global ind
-    global tandem
-    global transported
-    x = np.arange(0, num_rounds)
-    y = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-    y_ants_in_nest = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]   
-    
-    initiate_nests()
-    initiate_all_ants()
-    # initiate_all_ants_random_loc()
-    #best_nest_id = nest_qualities.index(max(nest_qualities))
-    conv_start = [-1]*num_nests
-    score = 0
-    conv_nest = -1
-    conv_nest_quality = -100
-
-    ind = 0
-    tandem = 0
-    transported = 0
-    broods_in_better_nest = 0
-    best_nest = max(nest_qualities)
-    for round in range(num_rounds):
-        #print(round)
-        # print([(len(Nests[0].ants_in_nest) - Nests[0].adult_ants_in_nest), (len(Nests[1].ants_in_nest) - Nests[1].adult_ants_in_nest), (len(Nests[2].ants_in_nest) - Nests[2].adult_ants_in_nest)])
-        
-        execute_one_round(round) 
-        # print_all_ants_states(0, num_ants)
-        nest_visits, transports_by_visits = print_all_nests_info(y, y_ants_in_nest)
-        if len(Nests[0].ants_in_nest) == 0 and not plot:
-            if num_nests >= 3:
-                broods_in_better_nest = 1.*(len(Nests[2].ants_in_nest) - Nests[2].adult_ants_in_nest) / num_broods
-            if is_validation:
-                break
-        for nest_id in range(1,num_nests):
-            if y_ants_in_nest[nest_id][-1] > percent_conv * num_ants: #if converged
-                if conv_start[nest_id] == -1:
-                    conv_start[nest_id] = round
-                else:
-                    if round - conv_start[nest_id] == persist_rounds:
-                        score = 1/(conv_start[nest_id]+1)
-                        conv_nest = nest_id
-                        conv_nest_quality = nest_qualities[conv_nest]
-            else:
-                if conv_start[nest_id] != -1:
-                    conv_start[nest_id] = -1
-        if score > 0 and not plot:
-            break
-    if not plot:
-        row = '"'+str(nest_qualities)+'", '
-        row += str(num_ants)+", "+str(pop_coeff)+", "+str(lambda_sigmoid)+", "+str(QUORUM_THRE)+", "+str(QUORUM_OFFSET)
-        row += ", "+str(search_find)+", "+str(follow_find)+", "+str(lead_forward)+", "+str(transport)+", "+str(run_number)+", "+str(score)+", "+str(conv_nest)+", "+str(conv_nest_quality)+"\n"
-        csvfile.write(row)
-        # print("# ants seeing 1,2,3... nests", nests_visited[1:], "num_transports by # of nests visited:", num_transports_by_nest_visits)
-    
-        recruit_acts = [(Ants[i].num_tandems + Ants[i].num_transports + Ants[i].num_rev_tandems) for i in range(num_active)]
-        n,_,_ = plt.hist(recruit_acts, bins=bs)
-        type_recruitments = [0] * 7
-        for i in range(num_active):
-            a = Ants[i].num_tandems
-            b = Ants[i].num_transports
-            c = Ants[i].num_rev_tandems
-            if a and not b:
-                type_recruitments[0] += 1
-            elif b and not a and not c:
-                type_recruitments[1] += 1
-            elif a and b and not c:
-                type_recruitments[2] += 1
-            elif b and c and not a:
-                type_recruitments[3] += 1
-            elif c and not b:
-                type_recruitments[4] += 1
-            elif a and b and c:
-                type_recruitments[5] += 1
-            elif not a and not b and not c:
-                type_recruitments[6] += 1
-
-        recruit_per_discovery_route = [0] * 3
-        for i in range(num_active):
-            for route in range(3):
-                if Ants[i].discovery_route == route and (Ants[i].num_tandems+Ants[i].num_transports) > 0:
-                    recruit_per_discovery_route[route] += 1
-
-        # all_disc = ind + tandem + transported
-        recruit_per_discovery_route = [recruit_per_discovery_route[i]for i in range(3)]
-
-        decision =  nest_qualities[Ants[1].cur_state.location]
-        accuracy = 0
-        if decision == 0 or len(Ants[0].nests_visited) <= 2:
-            accuracy = -1
-        elif decision  == best_nest:
-            accuracy = 1
-        # print(Ants[0].nests_visited, Ants[1].cur_state.location, Ants[2].cur_state.location, Ants[3].cur_state.location)
-        # print(conv_nest_quality)
-        ac2 = -1
-        if conv_nest_quality > 0:
-            # ac2 = (conv_nest_quality == best_nest)
-            ac2 = 1
-        return score, len(Nests[1].ants_in_nest)*1./num_ants, broods_in_better_nest, n, [ind, tandem, transported], type_recruitments, recruit_per_discovery_route, [conv_nest_quality > 0, conv_nest_quality == best_nest, [len(Ants[i].nests_visited) for i in range(num_active)], nest_visits, transports_by_visits]
-        # return score, [ac2, [len(Ants[i].nests_visited) for i in range(num_active)], nest_visits, transports_by_visits] 
-        # return score, conv_nest_quality == best_nest
-    else:
-        directory = str(date.today())+'/'
-        plt.figure()
-        plt.xlabel("Round")
-        plt.ylabel("# Ants In Nest")
-        plt.plot(x, np.array(y_ants_in_nest[0]), label="HOME Quality "+str(Nests[0].quality), color='r')
-        filename = str(Nests[0].quality)+','
-        for i in range(1, num_nests):
-            plt.plot(x, np.array(y_ants_in_nest[i]), label=("Nest "+str(i)+" Quality "+str(Nests[i].quality)))
-            filename += str(Nests[i].quality)+','
-        filename += "pop"+str(num_ants)+",coeff"+str(pop_coeff)+",lambda"+str(lambda_sigmoid)
-        filename += ",quorum"+str(QUORUM_THRE)+",qoffset"+str(QUORUM_OFFSET)+",sfind"+str(search_find)+",ffind"
-        filename += str(follow_find)+",lead"+str(lead_forward)+",trans"+str(transport)+"_"+str(run_number)+",score"+str(score)+",conv_nest"+str(conv_nest)+",conv_nest_q"+str(conv_nest_quality)
-        filename += ".png"
-        plt.legend(loc='best')
-        plt.savefig(directory+filename)
-        plt.close()
-
-        plt.figure()
-        plt.xlabel("Round")
-        plt.ylabel("Entropy of All Ants")
-        filename = "ent_"+filename
-        entropies = []
-        entropies_committed = []
-        non_empty_nests = []
-        for rd in range(len(y_ants_in_nest[0])):
-            ants_in_nests = [y_ants_in_nest[i][rd] for i in range(num_nests)]
-            committed_ants_in_nests = [y[i][rd] for i in range(num_nests)]
-            entropies.append(entropy(ants_in_nests))
-            entropies_committed.append(entropy(committed_ants_in_nests))
-            non_empty_nests.append(len([val for val in committed_ants_in_nests if val > 0.1*num_ants/num_nests]))
-        plt.plot(x, np.array(entropies), label="Entropy all")
-        plt.plot(x, np.array(entropies_committed), label="Entropy committed")
-        plt.plot(x, np.array(non_empty_nests), label="# Non-empty nests", color='r')
-        plt.legend(loc='best')
-        plt.savefig(directory+filename)
-        plt.close()
-        return 0
-
-
 # This function executes on round of transitions. One action proposed by each ant
 def execute_one_round(r):
     for x_id in range(num_ants):
@@ -632,11 +490,157 @@ def adjust_nests(x_id, s, a, new_nest=-1):
         Nests[s.location].adult_ants_in_nest += 1
     return ret
 
+# main simulation function
+def execute(plot, run_number, csvfile, is_validation = False):
+    global ind
+    global tandem
+    global transported
+    x = np.arange(0, num_rounds)
+    y = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+    y_ants_in_nest = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]   
+    
+    initiate_nests()
+    initiate_all_ants()
+    # initiate_all_ants_random_loc()
+
+    best_nest = max(nest_qualities)
+    best_nest_id = nest_qualities.index(best_nest)
+    conv_start = [-1]*num_nests
+    score = 0
+    conv_nest = -1
+    conv_nest_quality = -100
+
+    ind = 0
+    tandem = 0
+    transported = 0
+    broods_in_better_nest = 0
+    ants_in_better_nest = 0
+    for round in range(num_rounds):
+        #print(round)
+        # print([(len(Nests[0].ants_in_nest) - Nests[0].adult_ants_in_nest), (len(Nests[1].ants_in_nest) - Nests[1].adult_ants_in_nest), (len(Nests[2].ants_in_nest) - Nests[2].adult_ants_in_nest)])
+        
+        execute_one_round(round) 
+        # print_all_ants_states(0, num_ants)
+        nest_visits, transports_by_visits = print_all_nests_info(y, y_ants_in_nest)
+        if len(Nests[0].ants_in_nest) == 0 and not plot:
+            if num_nests >= 3:
+                broods_in_better_nest = 1.*(len(Nests[best_nest_id].ants_in_nest) - Nests[best_nest_id].adult_ants_in_nest) / num_broods
+                ants_in_better_nest = 1.*len(Nests[best_nest_id].ants_in_nest) / num_ants
+            if is_validation:
+                break
+        for nest_id in range(1,num_nests):
+            if y_ants_in_nest[nest_id][-1] > percent_conv * num_ants: #if converged
+                if conv_start[nest_id] == -1:
+                    conv_start[nest_id] = round
+                else:
+                    if round - conv_start[nest_id] == persist_rounds:
+                        score = 1/(conv_start[nest_id]+1)
+                        conv_nest = nest_id
+                        conv_nest_quality = nest_qualities[conv_nest]
+            else:
+                if conv_start[nest_id] != -1:
+                    conv_start[nest_id] = -1
+        if score > 0 and not plot:
+            break
+    if not plot:
+        row = '"'+str(nest_qualities)+'", '
+        row += str(num_ants)+", "+str(pop_coeff)+", "+str(lambda_sigmoid)+", "+str(QUORUM_THRE)+", "+str(QUORUM_OFFSET)
+        row += ", "+str(search_find)+", "+str(follow_find)+", "+str(lead_forward)+", "+str(transport)+", "+str(run_number)\
+        +", "+str(score)+", "+str(conv_nest)+", "+str(conv_nest_quality)+", "
+        row += str(round) + ", " + str(broods_in_better_nest)+","+str(len(Nests[2].ants_in_nest))+"\n"
+        csvfile.write(row)
+        # print("# ants seeing 1,2,3... nests", nests_visited[1:], "num_transports by # of nests visited:", num_transports_by_nest_visits)
+    
+        recruit_acts = [(Ants[i].num_tandems + Ants[i].num_transports + Ants[i].num_rev_tandems) for i in range(num_active)]
+        n,_,_ = plt.hist(recruit_acts, bins=bs)
+        type_recruitments = [0] * 7
+        for i in range(num_active):
+            a = Ants[i].num_tandems
+            b = Ants[i].num_transports
+            c = Ants[i].num_rev_tandems
+            if a and not b:
+                type_recruitments[0] += 1
+            elif b and not a and not c:
+                type_recruitments[1] += 1
+            elif a and b and not c:
+                type_recruitments[2] += 1
+            elif b and c and not a:
+                type_recruitments[3] += 1
+            elif c and not b:
+                type_recruitments[4] += 1
+            elif a and b and c:
+                type_recruitments[5] += 1
+            elif not a and not b and not c:
+                type_recruitments[6] += 1
+
+        recruit_per_discovery_route = [0] * 3
+        for i in range(num_active):
+            for route in range(3):
+                if Ants[i].discovery_route == route and (Ants[i].num_tandems+Ants[i].num_transports) > 0:
+                    recruit_per_discovery_route[route] += 1
+
+        # all_disc = ind + tandem + transported
+        recruit_per_discovery_route = [recruit_per_discovery_route[i]for i in range(3)]
+
+        accuracy = 0
+        if conv_nest == -1 or len(Ants[0].nests_visited) <= 2:
+            accuracy = -1
+        elif conv_nest_quality  == best_nest:
+            accuracy = 1
+        ac2 = -1
+        if conv_nest_quality > 0:
+            # ac2 = (conv_nest_quality == best_nest)
+            ac2 = 1
+        return score, len(Nests[1].ants_in_nest)*1./num_ants, \
+        (broods_in_better_nest, round, ants_in_better_nest), n, \
+        [ind, tandem, transported], type_recruitments, recruit_per_discovery_route, \
+        [conv_nest_quality > 0, conv_nest_quality == best_nest, \
+         [len(Ants[i].nests_visited) for i in range(num_active)], \
+         nest_visits, transports_by_visits]
+    else:
+        directory = str(date.today())+'/'
+        plt.figure()
+        plt.xlabel("Round")
+        plt.ylabel("# Ants In Nest")
+        plt.plot(x, np.array(y_ants_in_nest[0]), label="HOME Quality "+str(Nests[0].quality), color='r')
+        filename = str(Nests[0].quality)+','
+        for i in range(1, num_nests):
+            plt.plot(x, np.array(y_ants_in_nest[i]), label=("Nest "+str(i)+" Quality "+str(Nests[i].quality)))
+            filename += str(Nests[i].quality)+','
+        filename += "pop"+str(num_ants)+",coeff"+str(pop_coeff)+",lambda"+str(lambda_sigmoid)
+        filename += ",quorum"+str(QUORUM_THRE)+",qoffset"+str(QUORUM_OFFSET)+",sfind"+str(search_find)+",ffind"
+        filename += str(follow_find)+",lead"+str(lead_forward)+",trans"+str(transport)+"_"+str(run_number)+",score"+str(score)+",conv_nest"+str(conv_nest)+",conv_nest_q"+str(conv_nest_quality)
+        filename += ".png"
+        plt.legend(loc='best')
+        plt.savefig(directory+filename)
+        plt.close()
+
+        plt.figure()
+        plt.xlabel("Round")
+        plt.ylabel("Entropy of All Ants")
+        filename = "ent_"+filename
+        entropies = []
+        entropies_committed = []
+        non_empty_nests = []
+        for rd in range(len(y_ants_in_nest[0])):
+            ants_in_nests = [y_ants_in_nest[i][rd] for i in range(num_nests)]
+            committed_ants_in_nests = [y[i][rd] for i in range(num_nests)]
+            entropies.append(entropy(ants_in_nests))
+            entropies_committed.append(entropy(committed_ants_in_nests))
+            non_empty_nests.append(len([val for val in committed_ants_in_nests if val > 0.1*num_ants/num_nests]))
+        plt.plot(x, np.array(entropies), label="Entropy all")
+        plt.plot(x, np.array(entropies_committed), label="Entropy committed")
+        plt.plot(x, np.array(non_empty_nests), label="# Non-empty nests", color='r')
+        plt.legend(loc='best')
+        plt.savefig(directory+filename)
+        plt.close()
+        return 0
+
 def main():
     if not os.path.exists(str(date.today())):
         os.makedirs(str(date.today()))
     config = configparser.ConfigParser()
-    config.read(sys.argv[1])
+    config.read('ants.ini')
     assert('ENVIRONMENT' in config)
     assert('ALGO' in config)
     assert('SETTINGS' in config)
@@ -677,37 +681,40 @@ def main():
         compact_csvfile = open(compact_csvname, "w")
         splits_csvfile = open(splits_csvname, "w")
     if not pl:
-        header = "nest_qualities, num_ants, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport, run_number, score, conv_nest, conv_nest_quality\n"
+        header = "nest_qualities, num_ants, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport, run_number, score, conv_nest, conv_nest_quality, avg_rounds_til_empty, avg_brood_good, avg_pop_good_nest\n"
         csvfile.write(header)
-        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count\n"
+        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count, search_find, avg_rounds_til_empty, avg_ants, avg_broods, avg_transports\n"
         compact_csvfile.write(compact_header)
         splits_header = "num_ants, num_active, num_passive, num_broods, pop_coeff, \% Observed, \% Predicted, SD, P\n"
         splits_csvfile.write(splits_header)
     num_rounds = c_num_rounds
     percent_conv = c_percent_conv
     persist_rounds = c_persist_rounds
+
     histn_all = []
     disc_routes_all = []
     type_recruitments_all = []
     recruit_per_discovery_route_all = []
-    splits = []
-    
-    accuracy_all = []
     visits_all = []
-    num_transports_by_nest_visits = []
-    ac_colony_all = []
-    best_all = []
+    
     visits_colony_all = []
     nests_visited_colony_all = []
     in_left_nest_all = []
     params = [c_num_ants, c_nest_qualities, c_lambda_sigmoid, c_pop_coeff, c_QUORUM_THRE, c_QUORUM_OFFSET, c_search_find, c_follow_find, c_lead_forward, c_transport]
     
     for param in list(itertools.product(*params)):
+        num_transports_by_nest_visits = []
+        splits = []
+        rounds_til_empty_all = []
+        ants_in_better_nest_all = []
+        ac_colony_all = []
+        best_all = []
+        accuracy_all = []
         (num_ants, _nest_qualities, lambda_sigmoid, pop_coeff, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport) = param
         if (QUORUM_THRE==0.0 and QUORUM_OFFSET==0):
             pass
         nest_qualities = [float(i) for i in _nest_qualities.split(',')]
-        #print(num_ants, nest_qualities, lambda_sigmoid, pop_coeff, search_find)
+        # print(num_ants, nest_qualities, lambda_sigmoid, pop_coeff, search_find)
         num_nests = len(nest_qualities)
         observed = 0
         print(num_ants)
@@ -716,59 +723,60 @@ def main():
             num_active = int(num_ants/4)
             num_passive = int(num_ants/4)
             num_broods = int(num_ants/2)
-            # num_active = 1
-            # num_passive = 0
-            # num_broods = 3
         elif num_ants == 1:    
             num_ants = 326
             num_active = 70
             num_passive = 28
             num_broods = 228
-            pop_coeff = 0.45
+            # pop_coeff = 0.45
             observed = 0.61
         elif num_ants == 2:    
             num_ants = 244
             num_active = 59
             num_passive = 74
             num_broods = 111
-            pop_coeff = 0.35
+            # pop_coeff = 0.35
             observed = 0.80
         elif num_ants == 3:
             num_ants = 263
             num_active = 62
             num_passive = 95
             num_broods = 106
-            pop_coeff = 0.4
+            # pop_coeff = 0.4
             observed = 0.99
         elif num_ants == 4:
             num_ants = 301
             num_active = 67
             num_passive = 42
             num_broods = 192
-            pop_coeff = 0.4
+            # pop_coeff = 0.4
             observed = 0.98
         elif num_ants == 5:
             num_ants = 202
             num_active = 53
             num_passive = 88
             num_broods = 61
-            pop_coeff = 0.15
+            # pop_coeff = 0.15
             observed = 1.0
         elif num_ants == 6:
             num_ants = 347
             num_active = 73
             num_passive = 101
             num_broods = 173
-            pop_coeff = 0.3
+            # pop_coeff = 0.3
             observed = 0.02
 
 
         setup_score = 0.0
         for run_number in range(total_runs_per_setup):
-            sc, in_left_nest, broods_in_better_nest, histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2= execute(pl, run_number, csvfile)
-            # sc = execute(pl, run_number, csvfile)
+            sc, in_left_nest, (broods_in_better_nest, rounds_til_empty, ants_in_better_nest), \
+            histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2 = \
+            execute(pl, run_number, csvfile)
             setup_score += sc
-            # splits.append(broods_in_better_nest)
+            # in_left_nest_all.append(in_left_nest)
+            splits.append(broods_in_better_nest)
+            rounds_til_empty_all.append(rounds_til_empty)
+            ants_in_better_nest_all.append(ants_in_better_nest)
             # histn_all.append([1.*histn[i]/num_active for i in range(len(histn))])
             # disc_routes_all.append([1.*disc_routes[i]/num_active for i in range(len(disc_routes))])
             # if 1:
@@ -780,18 +788,28 @@ def main():
                 visits_colony_all.append(ac2[2])
                 nests_visited_colony_all.append(ac2[3])
                 num_transports_by_nest_visits.append(ac2[4])
+                
             # print('type_recruitments', type_recruitments)
             # if sum(type_recruitments[:-1]) > 0:
             #     type_recruitments_all.append([1.*type_recruitments[i]/sum(type_recruitments[:-1]) for i in range(6)])
             # recruit_per_discovery_route_all.append([1.*recruit_per_discovery_route[i]/num_active for i in range(len(recruit_per_discovery_route))])
-            in_left_nest_all.append(in_left_nest)
-        
+           
+        all_transports = [sum(x) for x in num_transports_by_nest_visits]
+        print(str(lambda_sigmoid), str(search_find), str(nest_qualities), np.mean(all_transports), np.percentile(all_transports, 25), np.percentile(all_transports, 75))
         setup_score /= total_runs_per_setup
-        print(in_left_nest_all)
+        # print(in_left_nest_all)
         if not pl:
-            compact_csvfile.write('"'+str(nest_qualities)+'",'+str(pop_coeff)+","+str(lambda_sigmoid)+","+str(QUORUM_THRE)+","+str(QUORUM_OFFSET)+","+str(setup_score)+","+str(sum(best_all))+","+str(sum(ac_colony_all))+"\n") 
+            compact_csvfile.write('"'+str(nest_qualities)+'",'+str(pop_coeff)+\
+                                  ","+str(lambda_sigmoid)+","+str(QUORUM_THRE)+\
+                                  ","+str(QUORUM_OFFSET)+","+str(setup_score)+\
+                                  ","+str(sum(best_all))+","+str(sum(ac_colony_all))+\
+                                  ","+str(search_find)+","+str(np.mean(rounds_til_empty_all))+\
+                                  ","+str(np.mean(ants_in_better_nest_all))+","+str(np.mean(splits))+\
+                                  ","+str(np.mean(all_transports))+"\n") 
             #+","+str(len(accuracy_all)*1./total_runs_per_setup)+"\n")
         # print(len(ac_colony_all))
+
+        ### Below is for splits among 1 good and 1 poor nest
         # if np.mean(splits) > observed:
         #     pvalue = 1.*len([splits[i] for i in range(total_runs_per_setup) if splits[i] <= observed ]) / total_runs_per_setup
         # else:
@@ -801,29 +819,28 @@ def main():
         # splits_csvfile.write(splits_header)
         # print(np.mean(accuracy_all), len(accuracy_all), np.percentile(visits_all,25), np.percentile(visits_all,50), np.percentile(visits_all,75))
         
-    # Build the percentage ants of different types of recruitment
-    fig, ax = plt.subplots()
-    counts = [sum(x) for x in zip(*num_transports_by_nest_visits)]
-    nests_counts = [sum(x) for x in zip(*nests_visited_colony_all)]
-    counts = counts[1:]/np.sum(counts)
-    nests_counts = nests_counts[1:]/np.sum(nests_counts)
-    np.pad(nests_counts, (0, len(counts)-len(nests_counts)), 'constant')
-    x_labels = [i for i in range(1, len(counts)+1)]
-    x_pos = np.arange(len(x_labels))
-    print("types of recruitment", x_pos, counts)
-    ax.bar(x_pos-0.1, counts, width=0.2, color='r', align='center', label='Number of Transports')
-    ax.bar(x_pos+0.1, nests_counts, width=0.2, color='b', align='center', label='Individual Ants')
-    ax.set_ylabel('Percentage')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(x_labels)
-    ax.set_xlabel('Number of Nests Visited')
-    ax.legend(prop={'size': 10})
-    ax.yaxis.grid(False)
+    ### Build the percentage ants of different types of recruitment
+    # fig, ax = plt.subplots()
+    # counts = [sum(x) for x in zip(*num_transports_by_nest_visits)]
+    # nests_counts = [sum(x) for x in zip(*nests_visited_colony_all)]
+    # counts = counts[1:]/np.sum(counts)
+    # nests_counts = nests_counts[1:]/np.sum(nests_counts)
+    # np.pad(nests_counts, (0, len(counts)-len(nests_counts)), 'constant')
+    # x_labels = [i for i in range(1, len(counts)+1)]
+    # x_pos = np.arange(len(x_labels))
+    # print("types of recruitment", x_pos, counts)
+    # ax.bar(x_pos-0.1, counts, width=0.2, color='r', align='center', label='Number of Transports')
+    # ax.bar(x_pos+0.1, nests_counts, width=0.2, color='b', align='center', label='Individual Ants')
+    # ax.set_ylabel('Percentage')
+    # ax.set_xticks(x_pos)
+    # ax.set_xticklabels(x_labels)
+    # ax.set_xlabel('Number of Nests Visited')
+    # ax.yaxis.grid(False)
      # Save the figure and show
-    plt.tight_layout()
-    plt.savefig(str(len(counts))+'nests')
+    # plt.tight_layout()
+    # plt.savefig(str(len(counts))+'nests')
     # plt.show()
-    plt.close()
+    # plt.close()
     # print('nest visits', np.mean(np.array(visits_colony_all)), len(visits_colony_all), np.percentile(visits_colony_all,25), np.percentile(visits_colony_all,50), np.percentile(visits_colony_all,75))
     
     # # For recruitment acts
@@ -904,5 +921,6 @@ def main():
     csvfile.close()
     compact_csvfile.close()
     splits_csvfile.close()
+
 if __name__ == "__main__":
     main()
