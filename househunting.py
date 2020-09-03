@@ -1,5 +1,3 @@
-#househunting2.py
-
 import itertools
 import numpy as np 
 import numpy.random as random
@@ -583,8 +581,9 @@ def execute(plot, run_number, csvfile, is_validation = False):
         recruit_per_discovery_route = [recruit_per_discovery_route[i]for i in range(3)]
 
         accuracy = 0
-        if conv_nest == -1 or len(Ants[0].nests_visited) <= 2:
+        if conv_nest == -1 :#or len(Ants[0].nests_visited) <= 2:
             accuracy = -1
+            conv_nest = 0
         elif conv_nest_quality  == best_nest:
             accuracy = 1
         ac2 = -1
@@ -596,7 +595,7 @@ def execute(plot, run_number, csvfile, is_validation = False):
         [ind, tandem, transported], type_recruitments, recruit_per_discovery_route, \
         [conv_nest_quality > 0, conv_nest_quality == best_nest, \
          [len(Ants[i].nests_visited) for i in range(num_active)], \
-         nest_visits, transports_by_visits]
+         nest_visits, transports_by_visits], conv_nest
     else:
         directory = str(date.today())+'/'
         plt.figure()
@@ -683,7 +682,7 @@ def main():
     if not pl:
         header = "nest_qualities, num_ants, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport, run_number, score, conv_nest, conv_nest_quality, avg_rounds_til_empty, avg_brood_good, avg_pop_good_nest\n"
         csvfile.write(header)
-        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count, search_find, avg_rounds_til_empty, avg_ants, avg_broods, avg_transports\n"
+        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count, search_find, avg_rounds_til_empty, avg_ants, avg_broods, avg_transports, conv_dist, conv_score\n"
         compact_csvfile.write(compact_header)
         splits_header = "num_ants, num_active, num_passive, num_broods, pop_coeff, \% Observed, \% Predicted, SD, P\n"
         splits_csvfile.write(splits_header)
@@ -768,15 +767,19 @@ def main():
 
 
         setup_score = 0.0
+
+        conv_cnt_by_nest_all = [0]*num_nests
         for run_number in range(total_runs_per_setup):
             sc, in_left_nest, (broods_in_better_nest, rounds_til_empty, ants_in_better_nest), \
-            histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2 = \
+            histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2, conv_nest_id = \
             execute(pl, run_number, csvfile)
+
             setup_score += sc
             # in_left_nest_all.append(in_left_nest)
             splits.append(broods_in_better_nest)
             rounds_til_empty_all.append(rounds_til_empty)
             ants_in_better_nest_all.append(ants_in_better_nest)
+            conv_cnt_by_nest_all[conv_nest_id] += 1
             # histn_all.append([1.*histn[i]/num_active for i in range(len(histn))])
             # disc_routes_all.append([1.*disc_routes[i]/num_active for i in range(len(disc_routes))])
             # if 1:
@@ -798,6 +801,9 @@ def main():
         print(str(lambda_sigmoid), str(search_find), str(nest_qualities), np.mean(all_transports), np.percentile(all_transports, 25), np.percentile(all_transports, 75))
         setup_score /= total_runs_per_setup
         # print(in_left_nest_all)
+        conv_cnt_by_nest_all = np.array(conv_cnt_by_nest_all)*1.0/total_runs_per_setup
+        conv_accuracy_score = np.dot(np.array(nest_qualities)/(max(nest_qualities)-min(nest_qualities)), conv_cnt_by_nest_all)
+        
         if not pl:
             compact_csvfile.write('"'+str(nest_qualities)+'",'+str(pop_coeff)+\
                                   ","+str(lambda_sigmoid)+","+str(QUORUM_THRE)+\
@@ -805,7 +811,8 @@ def main():
                                   ","+str(sum(best_all))+","+str(sum(ac_colony_all))+\
                                   ","+str(search_find)+","+str(np.mean(rounds_til_empty_all))+\
                                   ","+str(np.mean(ants_in_better_nest_all))+","+str(np.mean(splits))+\
-                                  ","+str(np.mean(all_transports))+"\n") 
+                                  ","+str(np.mean(all_transports))+","+\
+                                  str(conv_cnt_by_nest_all)+","+str(conv_accuracy_score)+"\n") 
             #+","+str(len(accuracy_all)*1./total_runs_per_setup)+"\n")
         # print(len(ac_colony_all))
 
@@ -922,5 +929,8 @@ def main():
     compact_csvfile.close()
     splits_csvfile.close()
 
-if __name__ == "__main__":
-    main()
+main()
+
+!zip -r /content/2020-08-17.zip /content/2020-08-17
+from google.colab import files
+files.download('/content/2020-08-17.zip')
