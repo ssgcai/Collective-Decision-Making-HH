@@ -928,9 +928,5 @@ def main():
     csvfile.close()
     compact_csvfile.close()
     splits_csvfile.close()
-
-main()
-
-!zip -r /content/2020-08-17.zip /content/2020-08-17
-from google.colab import files
-files.download('/content/2020-08-17.zip')
+if __name__ == "__main__":
+    main()
