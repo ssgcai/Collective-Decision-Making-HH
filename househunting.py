@@ -433,6 +433,11 @@ def adjust_nests(x_id, s, a, new_nest=-1):
                 # s.old_candidate_nest = s.candidate_nest
                 # s.candidate_nest = nnest
                 s.location = s.candidate_nest
+            else:
+                if s.phase == "E" or s.phase == "T":
+                    s.location = s.home_nest
+                else:
+                    s.location = s.candidate_nest
         elif s.state_name == "arrive":
             s.location = s.candidate_nest
             if a == "reject" and s.phase != "T":
