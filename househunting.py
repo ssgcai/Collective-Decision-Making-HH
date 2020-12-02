@@ -817,14 +817,14 @@ def main():
         # print(len(ac_colony_all))
 
         ### Below is for splits among 1 good and 1 poor nest
-        # if np.mean(splits) > observed:
-        #     pvalue = 1.*len([splits[i] for i in range(total_runs_per_setup) if splits[i] <= observed ]) / total_runs_per_setup
-        # else:
-        #     pvalue = 1.*len([splits[i] for i in range(total_runs_per_setup) if splits[i] >= observed ]) / total_runs_per_setup
-        # print(np.mean(splits), np.std(splits), pvalue)
-        # splits_header = str(num_ants)+','+ str(num_active)+','+ str(num_passive)+','+ str(num_broods)+','+ str(pop_coeff)+','+ str(observed)+',' + str(np.mean(splits))+','+str(np.std(splits))+ ','+str(pvalue)+'\n'
-        # splits_csvfile.write(splits_header)
-        # print(np.mean(accuracy_all), len(accuracy_all), np.percentile(visits_all,25), np.percentile(visits_all,50), np.percentile(visits_all,75))
+        if np.mean(splits) > observed:
+            pvalue = 1.*len([splits[i] for i in range(total_runs_per_setup) if splits[i] <= observed ]) / total_runs_per_setup
+        else:
+            pvalue = 1.*len([splits[i] for i in range(total_runs_per_setup) if splits[i] >= observed ]) / total_runs_per_setup
+        print(np.mean(splits), np.std(splits), pvalue)
+        splits_header = str(num_ants)+','+ str(num_active)+','+ str(num_passive)+','+ str(num_broods)+','+ str(pop_coeff)+','+ str(observed)+',' + str(np.mean(splits))+','+str(np.std(splits))+ ','+str(pvalue)+'\n'
+        splits_csvfile.write(splits_header)
+        print(np.mean(accuracy_all), len(accuracy_all), np.percentile(visits_all,25), np.percentile(visits_all,50), np.percentile(visits_all,75))
         
     ### Build the percentage ants of different types of recruitment
     # fig, ax = plt.subplots()
