@@ -86,10 +86,56 @@ class Nest:
         self.ants_in_nest = []
         self.adult_ants_in_nest = _adult_ants_in_nest
 
+class Graph:
+    def __init__(self, nest_array, edge_list):
+        self.nests = nest_array
+        self.edges = {}
+        for edge in edge_list:
+            edge_parts = edge.split(" ")
+            node_1 = float(edge_parts[0])
+            node_2 = float(edge_parts[1])
+            length = float(edge_parts[2])
+            if self.edges.get(node_1):
+                self.edges[node_1].append((node_2, length))
+            else:
+                self.edges[node_1] = [(node_2, length)]
+            if self.edges.get(node_2):
+                self.edges[node_2].append((node_1, length))
+            else:
+                self.edges[node_2] = [(node_1, length)]
+
+        for node in self.edges.keys():
+            self.edges[node].sort()
+
+    def get_probability_distribution(self, site_index):
+        curr_edges = [1.0/i[1] for i in self.edges[site_index]]
+        edge_sum = sum(curr_edges)
+        prob_list = [(i*1.0/edge_sum) for i in curr_edges]
+        return prob_list
+
+    def get_average_nest_distance(self, site_index):
+        curr_edges = [i[1] for i in self.edges[site_index]]
+        edge_avg = sum(curr_edges)*1.0/len(curr_edges)
+        return edge_avg
+
+    def get_search_find_prob(self, ant_home_nest):
+        home_avg = self.get_average_nest_distance(0)
+        other_avg = self.get_average_nest_distance(ant_home_nest)
+        if other_avg > home_avg:
+            new_search_find = home_avg*home_avg*1.0/(other_avg*other_avg)*search_find
+        else:
+            new_search_find = search_find
+        return [new_search_find, 1-new_search_find]
+
+
+
 Nests = {}
 # Dictionary x_id : ant. Note: Ants[-1] is a place holder. 
 # Ants[-1] has all members = NULL
 Ants = {} 
+
+global NestGraph
+NestGraph = None
 
 # A 2-level table corresponding to the input actions for each phase.
 # First level is the current agent-state of receiving ant, and the second
@@ -161,6 +207,9 @@ def initiate_all_ants_random_loc():
 def initiate_nests():
     for i in range(num_nests):
         Nests[i] = Nest(_id=i, _quality=nest_qualities[i])
+    # Generate the graph
+    global NestGraph
+    NestGraph = Graph(Nests,c_edges)
     # should have at least 1 home nest and 1 candidate nest
     assert(len(Nests) >= 2)
     # Initiate all ants to be in home nest
@@ -320,7 +369,7 @@ def Dista(x_id, s):
     global transported
     probs = [1,0]
     if s.state_name == "search":
-        probs = [search_find, 1-search_find]
+        probs = NestGraph.get_search_find_prob(s.home_nest)
     elif s.state_name == "follow":
         probs = [follow_find,1-follow_find]
     elif s.state_name == "lead_forward":
@@ -396,6 +445,10 @@ def Dy(action_type, x_id, src_nest):
 
 def DNest(exclude_nests=[]):
     available = [i for i in range(num_nests) if i not in exclude_nests]
+    # The simple case with the existing four nests in the config file, which currrently 
+    # have values 0.5, 1, 1.5, 2 
+
+    #return np.asscalar(np.random.choice(np.array(available), 1, p=NestGraph.get_probability_distribution(exclude_nests[0])))
     return random.choice(np.array(available))
 
 def adjust_phase(s, a):
@@ -518,7 +571,8 @@ def execute(plot, run_number, csvfile, is_validation = False):
         # print([(len(Nests[0].ants_in_nest) - Nests[0].adult_ants_in_nest), (len(Nests[1].ants_in_nest) - Nests[1].adult_ants_in_nest), (len(Nests[2].ants_in_nest) - Nests[2].adult_ants_in_nest)])
         
         execute_one_round(round) 
-        # print_all_ants_states(0, num_ants)
+        # if round % 500 == 0:
+        #     print_all_ants_states(0, num_ants)
         nest_visits, transports_by_visits = print_all_nests_info(y, y_ants_in_nest)
         if len(Nests[0].ants_in_nest) == 0 and not plot:
             if num_nests >= 3:
@@ -650,6 +704,9 @@ def main():
     c_num_ants = [int(i) for i in env['num_ants'].split('|')]
     c_nest_qualities = env['nest_qualities'].split('|')
 
+    global c_edges
+    c_edges = env['graph_edges'].split("|")
+
     c_lambda_sigmoid = [float(i) for i in algo['lambda_sigmoid'].split('|')]
     c_pop_coeff = [float(i) for i in algo['pop_coeff'].split('|')]
     c_QUORUM_THRE = [float(i) for i in algo['QUORUM_THRE'].split('|')]
@@ -780,11 +837,14 @@ def main():
             rounds_til_empty_all.append(rounds_til_empty)
             ants_in_better_nest_all.append(ants_in_better_nest)
             conv_cnt_by_nest_all[conv_nest_id] += 1
-            # histn_all.append([1.*histn[i]/num_active for i in range(len(histn))])
-            # disc_routes_all.append([1.*disc_routes[i]/num_active for i in range(len(disc_routes))])
-            # if 1:
-            #     accuracy_all.append(1)
-            #     visits_all.append(1)
+
+            # Data collect
+            histn_all.append([1.*histn[i]/num_active for i in range(len(histn))])
+            disc_routes_all.append([1.*disc_routes[i]/num_active for i in range(len(disc_routes))])
+            if 1:
+                accuracy_all.append(1)
+                visits_all.append(1)
+
             if ac2[0] > -1:
                 ac_colony_all.append(ac2[0])
                 best_all.append(ac2[1])
@@ -850,31 +910,31 @@ def main():
     # plt.close()
     # print('nest visits', np.mean(np.array(visits_colony_all)), len(visits_colony_all), np.percentile(visits_colony_all,25), np.percentile(visits_colony_all,50), np.percentile(visits_colony_all,75))
     
-    # # For recruitment acts
-    # error = []
-    # counts = []
-    # for i in range(len(bs)-1):
-    #     count = [histn_all[r][i] for r in range(len(histn_all))]
-    #     counts.append(np.mean(count))
-    #     error.append(np.std(count))
-    # print('Discovery routes:' , recruit_per_discovery_route_all)
+    # For recruitment acts
+    error = []
+    counts = []
+    for i in range(len(bs)-1):
+        count = [histn_all[r][i] for r in range(len(histn_all))]
+        counts.append(np.mean(count))
+        error.append(np.std(count))
+    print('Discovery routes:' , recruit_per_discovery_route_all)
 
-    # fig, ax = plt.subplots()
-    # x_labels = ['0','1-5','6-10','11-15','16-20','21-25','26-30','31-35']
-    # x_pos = np.arange(len(x_labels))
-    # ax.bar(x_pos, counts, yerr=error, align='center', alpha=0.5, ecolor='black', capsize=10)
-    # ax.set_xlabel('Number of Recruitment Acts')
-    # ax.set_ylabel('Percentage of Workers')
+    fig, ax = plt.subplots()
+    x_labels = ['0','1-5','6-10','11-15','16-20','21-25','26-30','31-35']
+    x_pos = np.arange(len(x_labels))
+    ax.bar(x_pos, counts, yerr=error, align='center', alpha=0.5, ecolor='black', capsize=10)
+    ax.set_xlabel('Number of Recruitment Acts')
+    ax.set_ylabel('Percentage of Workers')
 
-    # ax.set_xticks(x_pos)
-    # ax.set_xticklabels(x_labels)
-    # ax.yaxis.grid(True)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(x_labels)
+    ax.yaxis.grid(True)
 
-    # # Save the figure and show
-    # plt.tight_layout()
-    # plt.savefig('bar_plot_recruit_act')
-    # # plt.show()
-    # plt.close()
+    # Save the figure and show
+    plt.tight_layout()
+    plt.savefig('bar_plot_recruit_act')
+    # plt.show()
+    plt.close()
 
     # # Build the percentage ants of different types of recruitment
     # fig, ax = plt.subplots()
