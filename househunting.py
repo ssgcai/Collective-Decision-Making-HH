@@ -127,6 +127,15 @@ class Graph:
             new_search_find = search_find
         return [new_search_find, 1-new_search_find]
 
+    def get_follow_find_prob(self, ant_home_nest):
+        home_avg = self.get_average_nest_distance(0)
+        other_avg = self.get_average_nest_distance(ant_home_nest)
+        if other_avg > home_avg:
+            new_follow_find = home_avg*home_avg*1.0/(other_avg*other_avg)*follow_find
+        else:
+            new_follow_find = follow_find
+        return [new_follow_find, 1-new_follow_find]
+
 
 
 Nests = {}
@@ -371,7 +380,7 @@ def Dista(x_id, s):
     if s.state_name == "search":
         probs = NestGraph.get_search_find_prob(s.home_nest)
     elif s.state_name == "follow":
-        probs = [follow_find,1-follow_find]
+        probs = NestGraph.get_follow_find_prob(s.home_nest)
     elif s.state_name == "lead_forward":
         probs = [lead_forward, 1-lead_forward, 0]
         if s.terminate == 10:
@@ -542,7 +551,7 @@ def adjust_nests(x_id, s, a, new_nest=-1):
     return ret
 
 # main simulation function
-def execute(plot, run_number, csvfile, is_validation = False):
+def execute(plot, run_number, csvfile, is_validation = True):
     global ind
     global tandem
     global transported
@@ -841,9 +850,13 @@ def main():
             # Data collect
             histn_all.append([1.*histn[i]/num_active for i in range(len(histn))])
             disc_routes_all.append([1.*disc_routes[i]/num_active for i in range(len(disc_routes))])
-            if 1:
-                accuracy_all.append(1)
-                visits_all.append(1)
+            accuracy_all.append(broods_in_better_nest)
+            # @visits_all For now we're not actually using this statistic, not sure what it was supposed to mean in Jiajia's code
+            visits_all.append(1)
+
+            # if 1:
+                # accuracy_all.append(1)
+                # visits_all.append(1)
 
             if ac2[0] > -1:
                 ac_colony_all.append(ac2[0])
