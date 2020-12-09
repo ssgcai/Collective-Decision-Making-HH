@@ -1,10 +1,11 @@
 import itertools
-import numpy as np 
+import numpy as np
 import numpy.random as random
 import copy
 import matplotlib.pyplot as plt
 from datetime import date
 from scipy.stats import entropy
+from collections import defaultdict
 
 import sys
 import os
@@ -62,7 +63,7 @@ class State:
     def __init__(self, _state_name="at_nest", _home_nest=0, _candidate_nest=-1, _transitioned=False):
         self.state_name = _state_name # name of the state_name
         self.home_nest = _home_nest # default to 0
-        self.candidate_nest = _candidate_nest 
+        self.candidate_nest = _candidate_nest
         self.transitioned = _transitioned
         self.location = _home_nest
         self.phase = "E" # how much ant is committed to the candidate nest
@@ -72,7 +73,7 @@ class State:
 class Action:
     def __init__(self, _action_type="none", _receiving=-1):
         self.action_type = _action_type # type of the action
-        self.receiving = _receiving # the id of the receiving ant to this action. 
+        self.receiving = _receiving # the id of the receiving ant to this action.
 
     def clear_action(self):
         self.action_type = "none"
@@ -89,22 +90,13 @@ class Nest:
 class Graph:
     def __init__(self, nest_array, edge_list):
         self.nests = nest_array
-        self.edges = {}
+        self.edges = defaultdict(list)
         for edge in edge_list:
-            edge_parts = edge.split(" ")
-            node_1 = float(edge_parts[0])
-            node_2 = float(edge_parts[1])
-            length = float(edge_parts[2])
-            if self.edges.get(node_1):
-                self.edges[node_1].append((node_2, length))
-            else:
-                self.edges[node_1] = [(node_2, length)]
-            if self.edges.get(node_2):
-                self.edges[node_2].append((node_1, length))
-            else:
-                self.edges[node_2] = [(node_1, length)]
+            node_1, node_2, length = edge.split(" ")
+            self.edges[float(node_1)].append((float(node_2), float(length)))
+            self.edges[float(node_2)].append((float(node_1), float(length)))
 
-        for node in self.edges.keys():
+        for node in self.edges:
             self.edges[node].sort()
 
     def get_probability_distribution(self, site_index):
@@ -119,29 +111,31 @@ class Graph:
         return edge_avg
 
     def get_search_find_prob(self, ant_home_nest):
-        home_avg = self.get_average_nest_distance(0)
+        #home_avg = self.get_average_nest_distance(0)
         other_avg = self.get_average_nest_distance(ant_home_nest)
-        if other_avg > home_avg:
-            new_search_find = home_avg*home_avg*1.0/(other_avg*other_avg)*search_find
-        else:
-            new_search_find = search_find
+        new_search_find = (search_find/(other_avg + search_find))**2
+        #if other_avg > home_avg:
+        #    new_search_find = home_avg*home_avg*1.0/(other_avg*other_avg)*search_find
+        #else:
+        #    new_search_find = search_find
         return [new_search_find, 1-new_search_find]
 
     def get_follow_find_prob(self, ant_home_nest):
-        home_avg = self.get_average_nest_distance(0)
+        #home_avg = self.get_average_nest_distance(0)
         other_avg = self.get_average_nest_distance(ant_home_nest)
-        if other_avg > home_avg:
-            new_follow_find = home_avg*home_avg*1.0/(other_avg*other_avg)*follow_find
-        else:
-            new_follow_find = follow_find
+        new_follow_find = (follow_find/(other_avg + follow_find))**2
+        #if other_avg > home_avg:
+        #    new_follow_find = home_avg*home_avg*1.0/(other_avg*other_avg)*follow_find
+        #else:
+        #    new_follow_find = follow_find
         return [new_follow_find, 1-new_follow_find]
 
 
 
 Nests = {}
-# Dictionary x_id : ant. Note: Ants[-1] is a place holder. 
+# Dictionary x_id : ant. Note: Ants[-1] is a place holder.
 # Ants[-1] has all members = NULL
-Ants = {} 
+Ants = {}
 
 global NestGraph
 NestGraph = None
@@ -149,11 +143,11 @@ NestGraph = None
 # A 2-level table corresponding to the input actions for each phase.
 # First level is the current agent-state of receiving ant, and the second
 # level is the action_type. The value of the second level dictionary item
-# is a pair containing the resulting state, and a list of phases that 
+# is a pair containing the resulting state, and a list of phases that
 # allow this input action for the receiving ant in the current agent-state
 
 IT = { "at_nest":{"call":("follow", ["E","A","T"]),
-       "carry":("at_nest", ["E","A","C","T"])}, 
+       "carry":("at_nest", ["E","A","C","T"])},
        "search":{"carry":("at_nest", ["E","A","C","T"])}
      }
 
@@ -162,17 +156,17 @@ IT = { "at_nest":{"call":("follow", ["E","A","T"]),
 # second is the action_type. The value of the second level
 # dictionary item is the resulting agent-state.
 OT_E = {"at_nest":{"search":"search","no_action":"at_nest"}, # phase entry point
-        "search":{"find":"arrive", "no_action":"at_nest"}, 
+        "search":{"find":"arrive", "no_action":"at_nest"},
         "follow":{"follow_find":"arrive", "get_lost":"search"},
         "arrive":{"reject":"search","no_reject":"at_nest"}
         }
 OT_A = {"at_nest":{"search":"search", "accept":"at_nest"}, # phase entry point
-        "search":{"find":"arrive", "no_action":"at_nest"}, 
+        "search":{"find":"arrive", "no_action":"at_nest"},
         "follow":{"follow_find":"arrive", "get_lost":"search"},
         "arrive":{"reject":"search","no_reject":"at_nest"}
        }
 OT_C = {"at_nest":{"search":"search", "recruit":"quorum_sensing"},  # phase entry point
-        "search":{"find":"arrive", "no_action":"at_nest"}, 
+        "search":{"find":"arrive", "no_action":"at_nest"},
         "lead_forward":{"call":"at_nest", "get_lost":"search", "terminate":"at_nest"},
         "arrive":{"reject":"search","no_reject":"at_nest"},
         "quorum_sensing":{"quorum_met":"transport","quorum_not_met":"lead_forward"}
@@ -188,7 +182,7 @@ all_OTs = {"E":OT_E, "A":OT_A, "C":OT_C, "T":OT_T}
 
 
 # list of all the actions involving two ants
-all_pair_actions = ["carry", "call"] 
+all_pair_actions = ["carry", "call"]
 
 def initiate_all_ants():
     # Put all active ants in search state first
@@ -226,6 +220,11 @@ def initiate_nests():
     #Nests[0].ants_in_nest = [x for x in range(0,num_ants)]
     #Nests[0].adult_ants_in_nest = num_active+num_passive
 
+def none_output_list_helper(output_list):
+    output_list = [x for x in output_list if x]
+    if len(output_list) > 0:
+        return np.mean(output_list), np.std(output_list)
+    return None, None
 
 def print_all_ants_states(startid, endid):
     for x_id in range(startid, endid):
@@ -285,7 +284,7 @@ def execute_one_round(r):
         step_in_round += 1
 
 # This function should have x pick an available action and return this action and also the receiving ant's id.
-# Note that receiving ant 
+# Note that receiving ant
 def pick_action_and_receiving(x_id, s):
     a = Action()
     a.receiving = -1
@@ -321,7 +320,7 @@ def transition(x, y):
                         x.num_tandems += 1
                 # print(x.x_id, y.x_id, state_y.state_name, state_y.location, state_x.candidate_nest, action_type)
                 success, new_y_state_name = input_transition(y.x_id, state_y, action_type)
-                if success: 
+                if success:
                     output_transition(x.x_id, state_x, action_type)
                     nnest = state_x.candidate_nest
                     if action_type == "carry":
@@ -331,7 +330,7 @@ def transition(x, y):
                     if ret == "":
                         state_y.state_name = new_y_state_name
                     state_y.transitioned = True
-                    return True, state_x, state_y   
+                    return True, state_x, state_y
             elif y.x_id == -1 or (state_x.state_name == "transport" and state_y.state_name == "transport") or (state_x.state_name == "lead_forward" and state_y.state_name == "lead_forward"):
                     state_x.terminate += 1
                     # state_x.state_name = "at_nest"
@@ -346,7 +345,7 @@ def transition(x, y):
     return False, state_x, state_y
 
 # This function applies action a to state_name s according to the IT table. Returns success and a new state_name as the result
-# Returns a pair (success, new_s). Success is True if the action is in the IT table for s. 
+# Returns a pair (success, new_s). Success is True if the action is in the IT table for s.
 # Return (False, s) otherwise
 def input_transition(x_id, s, a):
     state = s.state_name
@@ -454,11 +453,11 @@ def Dy(action_type, x_id, src_nest):
 
 def DNest(exclude_nests=[]):
     available = [i for i in range(num_nests) if i not in exclude_nests]
-    # The simple case with the existing four nests in the config file, which currrently 
-    # have values 0.5, 1, 1.5, 2 
+    # The simple case with the existing four nests in the config file, which currrently
+    # have values 0.5, 1, 1.5, 2
 
-    #return np.asscalar(np.random.choice(np.array(available), 1, p=NestGraph.get_probability_distribution(exclude_nests[0])))
-    return random.choice(np.array(available))
+    return np.asscalar(np.random.choice(np.array(available), 1, p=NestGraph.get_probability_distribution(exclude_nests[0])))
+    #return random.choice(np.array(available))
 
 def adjust_phase(s, a):
     # if s.home_nest == s.candidate_nest:
@@ -511,7 +510,7 @@ def adjust_nests(x_id, s, a, new_nest=-1):
         elif a == "terminate":
             s.location = s.home_nest
     # Note that the cases below should only be reached when a pair wise transition is successful
-    # Also note that the last 3 cases below handle the receiving ant's nest and location changes, and 
+    # Also note that the last 3 cases below handle the receiving ant's nest and location changes, and
     # the first 2 handle the initiating ant's. The last case below is only for a brood/passive's nest movements.
     else:
         if a == "call":
@@ -524,8 +523,8 @@ def adjust_nests(x_id, s, a, new_nest=-1):
         elif a == "carry":
             if s.state_name == "transport":
                 s.location = s.home_nest
-            else: 
-                assert(new_nest > -1) 
+            else:
+                assert(new_nest > -1)
                 if not is_active(x_id) or s.home_nest == new_nest:
                     Nests[s.home_nest].committed_ants -= 1
                     s.old_candidate_nest = -1
@@ -544,7 +543,7 @@ def adjust_nests(x_id, s, a, new_nest=-1):
                     Ants[x_id].nests_visited.append(new_nest)
                     transported += 1
                     Ants[x_id].discovery_route = 2
-        
+
     Nests[s.location].ants_in_nest.append(x_id)
     if not is_brood(x_id):
         Nests[s.location].adult_ants_in_nest += 1
@@ -557,8 +556,8 @@ def execute(plot, run_number, csvfile, is_validation = True):
     global transported
     x = np.arange(0, num_rounds)
     y = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-    y_ants_in_nest = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]   
-    
+    y_ants_in_nest = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+
     initiate_nests()
     initiate_all_ants()
     # initiate_all_ants_random_loc()
@@ -575,14 +574,21 @@ def execute(plot, run_number, csvfile, is_validation = True):
     transported = 0
     broods_in_better_nest = 0
     ants_in_better_nest = 0
+
+    first_discovery = None
+    first_quorum = None
     for round in range(num_rounds):
         #print(round)
         # print([(len(Nests[0].ants_in_nest) - Nests[0].adult_ants_in_nest), (len(Nests[1].ants_in_nest) - Nests[1].adult_ants_in_nest), (len(Nests[2].ants_in_nest) - Nests[2].adult_ants_in_nest)])
-        
-        execute_one_round(round) 
+
+        execute_one_round(round)
         # if round % 500 == 0:
         #     print_all_ants_states(0, num_ants)
         nest_visits, transports_by_visits = print_all_nests_info(y, y_ants_in_nest)
+        if not first_discovery and Nests[1].adult_ants_in_nest > 0: #NOTE: ONLY VALID FOR SINGLE CANDIDATE CASE
+            first_discovery = round
+        if not first_quorum and Nests[1].adult_ants_in_nest > QUORUM_THRE*(num_active+num_passive)+QUORUM_OFFSET: #NOTE: ONLY VALID FOR SINGLE CANDIDATE CASE
+            first_quorum = round
         if len(Nests[0].ants_in_nest) == 0 and not plot:
             if num_nests >= 3:
                 broods_in_better_nest = 1.*(len(Nests[best_nest_id].ants_in_nest) - Nests[best_nest_id].adult_ants_in_nest) / num_broods
@@ -604,14 +610,16 @@ def execute(plot, run_number, csvfile, is_validation = True):
         if score > 0 and not plot:
             break
     if not plot:
+        total_tandems = sum([Ants[i].num_tandems for i in range(num_active)])
+        quorum_discovery_ratio = first_quorum / first_discovery if first_quorum else None
         row = '"'+str(nest_qualities)+'", '
         row += str(num_ants)+", "+str(pop_coeff)+", "+str(lambda_sigmoid)+", "+str(QUORUM_THRE)+", "+str(QUORUM_OFFSET)
         row += ", "+str(search_find)+", "+str(follow_find)+", "+str(lead_forward)+", "+str(transport)+", "+str(run_number)\
         +", "+str(score)+", "+str(conv_nest)+", "+str(conv_nest_quality)+", "
-        row += str(round) + ", " + str(broods_in_better_nest)+","+str(len(Nests[2].ants_in_nest))+"\n"
+        row += str(round) + ", " + str(broods_in_better_nest)+","+str(len(Nests[1].ants_in_nest))+","+str(total_tandems)+","+str(first_discovery)+","+str(first_quorum)+","+str(quorum_discovery_ratio)+"\n"
         csvfile.write(row)
         # print("# ants seeing 1,2,3... nests", nests_visited[1:], "num_transports by # of nests visited:", num_transports_by_nest_visits)
-    
+
         recruit_acts = [(Ants[i].num_tandems + Ants[i].num_transports + Ants[i].num_rev_tandems) for i in range(num_active)]
         n,_,_ = plt.hist(recruit_acts, bins=bs)
         type_recruitments = [0] * 7
@@ -658,7 +666,7 @@ def execute(plot, run_number, csvfile, is_validation = True):
         [ind, tandem, transported], type_recruitments, recruit_per_discovery_route, \
         [conv_nest_quality > 0, conv_nest_quality == best_nest, \
          [len(Ants[i].nests_visited) for i in range(num_active)], \
-         nest_visits, transports_by_visits], conv_nest
+         nest_visits, transports_by_visits], conv_nest, total_tandems, first_discovery, first_quorum, quorum_discovery_ratio
     else:
         directory = str(date.today())+'/'
         plt.figure()
@@ -746,9 +754,9 @@ def main():
         compact_csvfile = open(compact_csvname, "w")
         splits_csvfile = open(splits_csvname, "w")
     if not pl:
-        header = "nest_qualities, num_ants, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport, run_number, score, conv_nest, conv_nest_quality, avg_rounds_til_empty, avg_brood_good, avg_pop_good_nest\n"
+        header = "nest_qualities, num_ants, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport, run_number, score, conv_nest, conv_nest_quality, avg_rounds_til_empty, avg_brood_good, avg_pop_good_nest, total_tandems, first_discovery, first_quorum, quorum_discovery_ratio\n"
         csvfile.write(header)
-        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count, search_find, avg_rounds_til_empty, avg_ants, avg_broods, avg_transports, conv_dist, conv_score\n"
+        compact_header = "nest_qualities, pop_coeff, lambda_sigmoid, QUORUM_THRE, QUORUM_OFFSET, avg_score, best_count, conv_count, search_find, avg_rounds_til_empty, avg_ants, avg_broods, avg_transports, conv_dist, conv_score, avg_tandems, stdev_tandems, avg_first_discovery, stdev_first_discovery, avg_first_quorum, stdev_first_quorum, avg_quorum_discovery_ratio, stdev_quorum_discovery_ratio\n"
         compact_csvfile.write(compact_header)
         splits_header = "num_ants, num_active, num_passive, num_broods, pop_coeff, \% Observed, \% Predicted, SD, P\n"
         splits_csvfile.write(splits_header)
@@ -761,12 +769,12 @@ def main():
     type_recruitments_all = []
     recruit_per_discovery_route_all = []
     visits_all = []
-    
+
     visits_colony_all = []
     nests_visited_colony_all = []
     in_left_nest_all = []
     params = [c_num_ants, c_nest_qualities, c_lambda_sigmoid, c_pop_coeff, c_QUORUM_THRE, c_QUORUM_OFFSET, c_search_find, c_follow_find, c_lead_forward, c_transport]
-    
+
     for param in list(itertools.product(*params)):
         num_transports_by_nest_visits = []
         splits = []
@@ -775,11 +783,15 @@ def main():
         ac_colony_all = []
         best_all = []
         accuracy_all = []
+        tandems_all = []
+        first_discovery_all = []
+        first_quorum_all = []
+        quorum_discovery_ratio_all = []
         (num_ants, _nest_qualities, lambda_sigmoid, pop_coeff, QUORUM_THRE, QUORUM_OFFSET, search_find, follow_find, lead_forward, transport) = param
         if (QUORUM_THRE==0.0 and QUORUM_OFFSET==0):
             pass
         nest_qualities = [float(i) for i in _nest_qualities.split(',')]
-        # print(num_ants, nest_qualities, lambda_sigmoid, pop_coeff, search_find)
+        print(num_ants, nest_qualities, lambda_sigmoid, pop_coeff, search_find)
         num_nests = len(nest_qualities)
         observed = 0
         print(num_ants)
@@ -788,14 +800,14 @@ def main():
             num_active = int(num_ants/4)
             num_passive = int(num_ants/4)
             num_broods = int(num_ants/2)
-        elif num_ants == 1:    
+        elif num_ants == 1:
             num_ants = 326
             num_active = 70
             num_passive = 28
             num_broods = 228
             # pop_coeff = 0.45
             observed = 0.61
-        elif num_ants == 2:    
+        elif num_ants == 2:
             num_ants = 244
             num_active = 59
             num_passive = 74
@@ -830,14 +842,21 @@ def main():
             num_broods = 173
             # pop_coeff = 0.3
             observed = 0.02
-
+        elif num_ants <= 16 and num_ants >= 7:
+            num_worker_ants = [139, 118, 98, 169, 47, 118, 66, 187, 100, 75][num_ants - 7]
+            num_broods = [92, 75, 59, 116, 19, 75, 34, 130, 61, 41][num_ants - 7] #estimate: (workers - 47)/(187 - 47) * (130 - 19) + 19
+            #num_active = [32, 30, 18, 24, 14, 33, 23, 29, 17, 25][num_ants - 7] #100
+            num_active = [55, 26, 39, 26, 27, 42, 21, 40, 34, 40][num_ants - 7] #300
+            num_passive = num_worker_ants - num_active
+            num_ants = num_broods + num_worker_ants
 
         setup_score = 0.0
 
         conv_cnt_by_nest_all = [0]*num_nests
         for run_number in range(total_runs_per_setup):
+            #if run_number % 250 == 0: print("beginning run", run_number, "for", num_ants, "ants")
             sc, in_left_nest, (broods_in_better_nest, rounds_til_empty, ants_in_better_nest), \
-            histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2, conv_nest_id = \
+            histn, disc_routes, type_recruitments, recruit_per_discovery_route, ac2, conv_nest_id, total_tandems, first_discovery, first_quorum, quorum_discovery_ratio = \
             execute(pl, run_number, csvfile)
 
             setup_score += sc
@@ -854,6 +873,11 @@ def main():
             # @visits_all For now we're not actually using this statistic, not sure what it was supposed to mean in Jiajia's code
             visits_all.append(1)
 
+            tandems_all.append(total_tandems)
+            first_discovery_all.append(first_discovery)
+            first_quorum_all.append(first_quorum)
+            quorum_discovery_ratio_all.append(quorum_discovery_ratio)
+
             # if 1:
                 # accuracy_all.append(1)
                 # visits_all.append(1)
@@ -864,19 +888,23 @@ def main():
                 visits_colony_all.append(ac2[2])
                 nests_visited_colony_all.append(ac2[3])
                 num_transports_by_nest_visits.append(ac2[4])
-                
+
             # print('type_recruitments', type_recruitments)
             # if sum(type_recruitments[:-1]) > 0:
             #     type_recruitments_all.append([1.*type_recruitments[i]/sum(type_recruitments[:-1]) for i in range(6)])
             # recruit_per_discovery_route_all.append([1.*recruit_per_discovery_route[i]/num_active for i in range(len(recruit_per_discovery_route))])
-           
+
         all_transports = [sum(x) for x in num_transports_by_nest_visits]
         print(str(lambda_sigmoid), str(search_find), str(nest_qualities), np.mean(all_transports), np.percentile(all_transports, 25), np.percentile(all_transports, 75))
         setup_score /= total_runs_per_setup
         # print(in_left_nest_all)
         conv_cnt_by_nest_all = np.array(conv_cnt_by_nest_all)*1.0/total_runs_per_setup
         conv_accuracy_score = np.dot(np.array(nest_qualities)/(max(nest_qualities)-min(nest_qualities)), conv_cnt_by_nest_all)
-        
+
+        avg_first_discovery_output, stdev_first_discovery_output = none_output_list_helper(first_discovery_all)
+        avg_first_quorum_output, stdev_first_quorum_output = none_output_list_helper(first_quorum_all)
+        avg_quorum_discovery_ratio_output, stdev_quorum_discovery_ratio_output = none_output_list_helper(quorum_discovery_ratio_all)
+
         if not pl:
             compact_csvfile.write('"'+str(nest_qualities)+'",'+str(pop_coeff)+\
                                   ","+str(lambda_sigmoid)+","+str(QUORUM_THRE)+\
@@ -885,7 +913,7 @@ def main():
                                   ","+str(search_find)+","+str(np.mean(rounds_til_empty_all))+\
                                   ","+str(np.mean(ants_in_better_nest_all))+","+str(np.mean(splits))+\
                                   ","+str(np.mean(all_transports))+","+\
-                                  str(conv_cnt_by_nest_all)+","+str(conv_accuracy_score)+"\n") 
+                                  str(conv_cnt_by_nest_all)+","+str(conv_accuracy_score)+","+str(np.mean(tandems_all))+","+str(np.std(tandems_all))+","+str(avg_first_discovery_output)+","+str(stdev_first_discovery_output)+","+str(avg_first_quorum_output)+","+str(stdev_first_quorum_output)+","+str(avg_quorum_discovery_ratio_output)+","+str(stdev_quorum_discovery_ratio_output)+"\n")
             #+","+str(len(accuracy_all)*1./total_runs_per_setup)+"\n")
         # print(len(ac_colony_all))
 
@@ -898,7 +926,7 @@ def main():
         splits_header = str(num_ants)+','+ str(num_active)+','+ str(num_passive)+','+ str(num_broods)+','+ str(pop_coeff)+','+ str(observed)+',' + str(np.mean(splits))+','+str(np.std(splits))+ ','+str(pvalue)+'\n'
         splits_csvfile.write(splits_header)
         print(np.mean(accuracy_all), len(accuracy_all), np.percentile(visits_all,25), np.percentile(visits_all,50), np.percentile(visits_all,75))
-        
+
     ### Build the percentage ants of different types of recruitment
     # fig, ax = plt.subplots()
     # counts = [sum(x) for x in zip(*num_transports_by_nest_visits)]
@@ -922,7 +950,7 @@ def main():
     # plt.show()
     # plt.close()
     # print('nest visits', np.mean(np.array(visits_colony_all)), len(visits_colony_all), np.percentile(visits_colony_all,25), np.percentile(visits_colony_all,50), np.percentile(visits_colony_all,75))
-    
+
     # For recruitment acts
     error = []
     counts = []
